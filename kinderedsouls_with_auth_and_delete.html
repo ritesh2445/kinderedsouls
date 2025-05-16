@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kindred Souls - Customizable Appreciation App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1a237e 0%, #311b92 35%, #0d0d0d 100%);
+            color: #E0E0E0;
+            min-height: 100vh;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+        .card-enter {
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .card-enter-active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .modal {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+            background-color: rgba(30, 30, 40, 0.75); /* Slightly more opaque for form readability */
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #E0E0E0;
+        }
+        .modal-hidden {
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+        }
+        .modal-visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
+        .modal-content h2 { color: #FFFFFF; }
+        .modal-content label { color: #B0BEC5; } /* Lighter label color */
+        .modal-content input[type="text"],
+        .modal-content input[type="url"],
+        .modal-content textarea {
+            background-color: rgba(10, 10, 20, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #E0E0E0;
+            border-radius: 0.5rem; /* Tailwind's rounded-lg */
+        }
+        .modal-content input[type="text"]:focus,
+        .modal-content input[type="url"]:focus,
+        .modal-content textarea:focus {
+            background-color: rgba(0, 0, 10, 0.6);
+            border-color: rgba(66, 153, 225, 0.7); /* A Gemini-like blue for focus */
+            box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3);
+            outline: none;
+        }
+         .modal-content .form-input::placeholder {
+            color: #718096; /* Tailwind gray-500 */
+        }
+
+
+        .btn-action {
+            transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .btn-primary { /* For modal submit */
+            background-image: linear-gradient(45deg, #4285F4, #9B59B6);
+        }
+        .btn-primary:hover {
+            background-image: linear-gradient(45deg, #5a95f5, #a969c4);
+        }
+         .btn-secondary { /* For modal close */
+            background-color: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .btn-secondary:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+
+        .radiant-text-header {
+            background-image: linear-gradient(45deg, #4285F4 10%, #9B59B6 30%, #FBBC05 50%, #E67C73 70%, #34A853 90%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; text-fill-color: transparent;
+        }
+
+        .custom-message-box {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            z-index: 1000; font-size: 0.9rem; opacity: 0; visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s; color: white;
+        }
+        .custom-message-box.show { opacity: 1; visibility: visible; }
+        .custom-message-box.success { background-color: rgba(76, 175, 80, 0.85); border: 1px solid rgba(76, 175, 80, 1); }
+        .custom-message-box.error { background-color: rgba(244, 67, 54, 0.85); border: 1px solid rgba(244, 67, 54, 1); }
+        .custom-message-box.info { background-color: rgba(33, 150, 243, 0.85); border: 1px solid rgba(33, 150, 243, 1); }
+
+        header p { color: #CFD8DC; }
+        #loadingIndicator { color: #B0BEC5; }
+    
+    .glowing-text {
+        color: #ffffff;
+        text-shadow: 0 0 5px #fff, 0 0 10px #9B59B6, 0 0 15px #9B59B6, 0 0 20px #9B59B6;
+    }
+
+</style>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "your-app.firebaseapp.com",
+    projectId: "your-project-id",
+    storageBucket: "your-app.appspot.com",
+    messagingSenderId: "YOUR_MSG_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window.firebaseDB = db;
+  window.firebaseFns = { collection, getDocs, addDoc };
+</script>
+
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAi6jrpnfGXKfSFLzrwYMZ8TrIgdZmYFgQ",
+    authDomain: "kinderedsouls-f0297.firebaseapp.com",
+    projectId: "kinderedsouls-f0297",
+    storageBucket: "kinderedsouls-f0297.firebasestorage.app",
+    messagingSenderId: "733326931042",
+    appId: "1:733326931042:web:75e4339ce6e45d26710d3b",
+    measurementId: "G-ZPE95MF6SV"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  window.firebaseDB = db;
+  window.firebaseFns = { collection, getDocs, addDoc, deleteDoc, doc };
+  window.firebaseAuth = auth;
+  window.firebaseProvider = provider;
+  window.currentUser = null;
+
+  onAuthStateChanged(auth, (user) => {
+    if (user && user.email === "ritumartawar@gmail.com") {
+      window.currentUser = user;
+      document.getElementById('openAddModalBtn').style.display = 'inline-block';
+      document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'inline-block');
+      document.getElementById('signInBtn').style.display = 'none';
+      document.getElementById('signOutBtn').style.display = 'inline-block';
+    } else {
+      document.getElementById('openAddModalBtn').style.display = 'none';
+      document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'none');
+      document.getElementById('signInBtn').style.display = 'inline-block';
+      document.getElementById('signOutBtn').style.display = 'none';
+    }
+  });
+
+  window.login = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      alert("Login failed: " + error.message);
+    }
+  };
+
+  window.logout = async () => {
+    await signOut(auth);
+    window.location.reload();
+  };
+</script>
+
+</head>
+<body class="antialiased">
+
+    <header class="py-6 md:py-8 text-center sticky top-0 z-40" style="background-color: rgba(13, 13, 13, 0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
+        <div class="container mx-auto px-4 flex flex-col sm:flex-row justify-between items-center">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold radiant-text-header">Kindred Souls</h1>
+                <p class="text-md mt-1">Cherish Your Connections</p>
+            </div>
+            <button id="openAddModalBtn" class="btn-action bg-indigo-500/70 hover:bg-indigo-600/80 text-white font-semibold py-2.5 px-5 rounded-lg shadow-lg backdrop-blur-sm border border-indigo-400/50 mt-4 sm:mt-0 text-sm">
+                ✨ Add New Soul
+            </button>
+        
+<div class="mt-4 sm:mt-0 flex gap-3">
+  <button id="signInBtn" onclick="login()" class="btn-secondary text-white font-medium py-2 px-4 rounded-lg text-sm hidden">Sign In</button>
+  <button id="signOutBtn" onclick="logout()" class="btn-secondary text-white font-medium py-2 px-4 rounded-lg text-sm hidden">Sign Out</button>
+</div>
+</div>
+    </header>
+<div class="text-center text-lg md:text-xl mt-4 mb-6 font-semibold glowing-text">
+    A project by Ritesh Martawar to spread smiles
+</div>
+
+
+    <main id="cardContainer" class="container mx-auto px-4 py-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        </main>
+
+    <div id="loadingIndicator" class="text-center py-8 hidden">
+        </div>
+
+    <div id="addEditModal" class="modal modal-hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center p-4 z-50">
+        <div class="modal-content rounded-xl shadow-2xl w-full max-w-lg max-h-[95vh] overflow-y-auto p-6 md:p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modalTitle" class="text-2xl font-semibold">Create New Soul Card</h2>
+                <button onclick="closeAddEditModal()" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+            </div>
+            <form id="personForm">
+                <input type="hidden" id="personId"> <div class="mb-4">
+                    <label for="personName" class="block text-sm font-medium mb-1">Name</label>
+                    <input type="text" id="personName" name="personName" required class="form-input w-full p-2.5 text-sm" placeholder="e.g., Eleanor Vance">
+                </div>
+                
+                <div class="mb-4">
+                    <label for="personPicture" class="block text-sm font-medium mb-1">Image URL</label>
+                    <input type="url" id="personPicture" name="personPicture" required class="form-input w-full p-2.5 text-sm" placeholder="https://example.com/image.jpg">
+                </div>
+
+                <div class="mb-4">
+                    <label for="personMessage" class="block text-sm font-medium mb-1">Special Message</label>
+                    <textarea id="personMessage" name="personMessage" rows="3" required class="form-input w-full p-2.5 text-sm" placeholder="Your heartfelt message..."></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="personPhotosLink" class="block text-sm font-medium mb-1">Google Photos/Drive Link</label>
+                    <input type="url" id="personPhotosLink" name="personPhotosLink" required class="form-input w-full p-2.5 text-sm" placeholder="https://photos.app.goo.gl/...">
+                </div>
+
+                <div class="mb-6">
+                    <label for="personSpotifyLink" class="block text-sm font-medium mb-1">Spotify Link</label>
+                    <input type="url" id="personSpotifyLink" name="personSpotifyLink" required class="form-input w-full p-2.5 text-sm" placeholder="https://open.spotify.com/playlist/...">
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeAddEditModal()" class="btn-secondary text-white font-medium py-2 px-4 rounded-lg text-sm">Cancel</button>
+                    <button type="submit" class="btn-primary text-white font-semibold py-2 px-5 rounded-lg text-sm">Save Soul</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="customMessageBox" class="custom-message-box"></div>
+
+    <script>
+        // --- Data Store Key ---
+        const LOCAL_STORAGE_KEY = 'kindredSoulsData';
+
+        // --- Initial People Data (example, if localStorage is empty) ---
+        const defaultPeopleData = [
+            {
+                id: 1715857800000, // Example timestamp ID
+                name: "Example Soul",
+                picture: "https://placehold.co/300x300/4285F4/FFFFFF?text=Example",
+                message: "This is an example card. Add your own Kindred Souls by clicking the 'Add New Soul' button!",
+                photosLink: "https://photos.google.com",
+                spotifyLink: "https://open.spotify.com"
+            }
+        ];
+        
+        // Gemini-inspired gradients for card borders/accents
+        const gradients = [
+            "linear-gradient(135deg, #4285F4 0%, #9B59B6 100%)", "linear-gradient(135deg, #FF7043 0%, #F06292 50%, #AB47BC 100%)",
+            "linear-gradient(135deg, #26A69A 0%, #42A5F5 100%)", "linear-gradient(135deg, #FBC02D 0%, #FF7043 100%)",
+            "linear-gradient(135deg, #7E57C2 0%, #EC407A 100%)", "linear-gradient(135deg, #5C6BC0 0%, #00838F 100%)",
+            "linear-gradient(135deg, #D81B60 0%, #F4511E 100%)", "linear-gradient(135deg, #8E24AA 0%, #5E35B1 100%)",
+            "linear-gradient(135deg, #039BE5 0%, #00ACC1 100%)", "linear-gradient(135deg, #FFCA28 0%, #EF5350 100%)",
+            "linear-gradient(135deg, #66BB6A 0%, #29B6F6 100%)", "linear-gradient(135deg, #AD1457 0%, #6A1B9A 100%)",
+            "linear-gradient(135deg, #1E88E5 0%, #D81B60 100%)", "linear-gradient(135deg, #FF8F00 0%, #C2185B 100%)",
+            "linear-gradient(135deg, #00C853 0%, #0091EA 100%)", "linear-gradient(135deg, #F57C00 0%, #D32F2F 100%)",
+            "linear-gradient(135deg, #4A148C 0%, #303F9F 100%)", "linear-gradient(135deg, #C51162 0%, #F50057 100%)",
+            "linear-gradient(135deg, #00BFA5 0%, #00B8D4 100%)", "linear-gradient(135deg, #FF6D00 0%, #DD2C00 100%)"
+        ];
+
+        // --- DOM Elements ---
+        const cardContainer = document.getElementById('cardContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const customMessageBox = document.getElementById('customMessageBox');
+        const addEditModalEl = document.getElementById('addEditModal');
+        const personForm = document.getElementById('personForm');
+        const openAddModalBtn = document.getElementById('openAddModalBtn');
+        const modalTitleEl = document.getElementById('modalTitle');
+
+        // --- State ---
+        let peopleData = [];
+        let cardsLoaded = 0;
+        const cardsPerLoad = 6; 
+
+        // --- LocalStorage Functions ---
+        
+async function loadPeopleDataFromLocalStorage() {
+    const db = window.firebaseDB;
+    const { collection, getDocs } = window.firebaseFns;
+    const querySnapshot = await getDocs(collection(db, "souls"));
+    const data = [];
+    querySnapshot.forEach((doc) => {
+        data.push(doc.data());
+    });
+    return data;
+}
+
+            const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (data) {
+                return JSON.parse(data);
+            } else {
+                // If no data, save and return default example or an empty array
+                // localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(defaultPeopleData));
+                // return defaultPeopleData;
+                return []; // Start with empty if no data, user can add.
+            }
+        }
+
+        
+async function savePeopleDataToLocalStorage() {
+    const db = window.firebaseDB;
+    const { addDoc, collection } = window.firebaseFns;
+    const newSoul = peopleData[0]; // only the latest added
+    try {
+        await addDoc(collection(db, "souls"), newSoul);
+    } catch (error) {
+        showCustomMessage("Error saving to Firebase.", "error");
+        console.error("Firebase Save Error:", error);
+    }
+}
+
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(peopleData));
+        }
+
+        // --- Core Functions ---
+        function createPersonCard(person, index) {
+            const card = document.createElement('div');
+            card.className = 'card-enter rounded-2xl shadow-xl overflow-hidden flex flex-col transform hover:scale-[1.03] transition-transform duration-300 ease-out';
+            card.style.backgroundColor = 'rgba(20, 20, 30, 0.55)';
+            card.style.backdropFilter = 'blur(18px) saturate(160%)';
+            card.style.webkitBackdropFilter = 'blur(18px) saturate(160%)';
+            const cardGradient = gradients[index % gradients.length];
+            card.style.border = `2px solid transparent`;
+            card.style.borderImageSource = cardGradient;
+            card.style.borderImageSlice = '1';
+            card.style.borderImageRepeat = 'stretch';
+
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'w-full h-64 md:h-72 bg-cover bg-center';
+            imageContainer.style.backgroundImage = `url(${person.picture})`;
+            imageContainer.onerror = function() { // Basic fallback for background image
+                this.style.backgroundImage = `url(https://placehold.co/300x300/7F1D1D/FFFFFF?text=Image+Error)`;
+            };
+            imageContainer.setAttribute('role', 'img');
+            imageContainer.setAttribute('aria-label', `Picture of ${person.name}`);
+
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'p-5 md:p-6 flex flex-col flex-grow'; 
+            contentWrapper.style.background = 'rgba(10, 10, 15, 0.35)';
+
+            const nameEl = document.createElement('h3');
+            nameEl.className = 'text-xl md:text-2xl font-semibold text-neutral-100 mb-2';
+            nameEl.textContent = person.name;
+
+            const messageEl = document.createElement('p');
+            messageEl.className = 'text-neutral-200 text-sm leading-relaxed mb-4 flex-grow';
+            messageEl.textContent = person.message;
+
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'mt-auto grid grid-cols-2 gap-3';
+
+            const memoriesButton = document.createElement('button');
+            memoriesButton.className = 'btn-action text-sm bg-blue-500/60 hover:bg-blue-600/70 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg backdrop-blur-sm border border-blue-400/40';
+            memoriesButton.textContent = 'View Memories';
+            memoriesButton.onclick = () => {
+                if (person.photosLink) window.open(person.photosLink, '_blank', 'noopener,noreferrer');
+                else showCustomMessage("No photo link provided for this soul.", "info");
+            };
+
+            const songsButton = document.createElement('button');
+            songsButton.className = 'btn-action text-sm bg-purple-500/60 hover:bg-purple-600/70 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg backdrop-blur-sm border border-purple-400/40';
+            songsButton.textContent = 'Song Library';
+            songsButton.onclick = () => {
+                if (person.spotifyLink) window.open(person.spotifyLink, '_blank', 'noopener,noreferrer');
+                else showCustomMessage("No Spotify link provided for this soul.", "info");
+            };
+
+            buttonsContainer.appendChild(memoriesButton);
+            buttonsContainer.appendChild(songsButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-btn btn-action text-sm bg-red-500/60 hover:bg-red-600/70 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg backdrop-blur-sm border border-red-400/40';
+            deleteButton.textContent = 'Delete';
+            deleteButton.style.display = 'none';
+            deleteButton.onclick = async () => {
+                if (confirm("Are you sure you want to delete this soul?")) {
+                    try {
+                        const docRef = window.firebaseFns.doc(window.firebaseDB, "souls", person.id);
+                        await window.firebaseFns.deleteDoc(docRef);
+                        showCustomMessage("Deleted successfully", "success");
+                        peopleData = peopleData.filter(p => p.id !== person.id);
+                        renderAllCards();
+                    } catch (e) {
+                        console.error(e);
+                        showCustomMessage("Error deleting from Firebase", "error");
+                    }
+                }
+            };
+            buttonsContainer.appendChild(deleteButton);
+
+            contentWrapper.appendChild(nameEl);
+            contentWrapper.appendChild(messageEl);
+            contentWrapper.appendChild(buttonsContainer);
+            card.appendChild(imageContainer);
+            card.appendChild(contentWrapper);
+
+            requestAnimationFrame(() => card.classList.add('card-enter-active'));
+            return card;
+        }
+        
+        function renderAllCards() {
+            cardContainer.innerHTML = ''; // Clear existing cards
+            cardsLoaded = 0; // Reset count
+            loadMoreCards(); // Load initial batch from the (potentially updated) peopleData
+        }
+
+        function openAddEditModal() {
+            modalTitleEl.textContent = "Create New Soul Card";
+            personForm.reset(); // Clear form fields
+            document.getElementById('personId').value = ''; // Clear any potential ID
+            addEditModalEl.classList.remove('modal-hidden');
+            addEditModalEl.classList.add('modal-visible');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeAddEditModal() {
+            addEditModalEl.classList.add('modal-hidden');
+            addEditModalEl.classList.remove('modal-visible');
+            document.body.style.overflow = 'auto';
+        }
+        
+        function handlePersonFormSubmit(event) {
+            event.preventDefault();
+            const newSoul = {
+                id: Date.now(), // Simple unique ID
+                name: document.getElementById('personName').value.trim(),
+                picture: document.getElementById('personPicture').value.trim(),
+                message: document.getElementById('personMessage').value.trim(),
+                photosLink: document.getElementById('personPhotosLink').value.trim(),
+                spotifyLink: document.getElementById('personSpotifyLink').value.trim(),
+            };
+
+            // Basic validation
+            if (!newSoul.name || !newSoul.picture || !newSoul.message || !newSoul.photosLink || !newSoul.spotifyLink) {
+                showCustomMessage("Please fill in all fields.", "error");
+                return;
+            }
+            // URL validation (simple check)
+            try {
+                new URL(newSoul.picture);
+                new URL(newSoul.photosLink);
+                new URL(newSoul.spotifyLink);
+            } catch (_) {
+                showCustomMessage("Please enter valid URLs for picture and links.", "error");
+                return;
+            }
+
+            peopleData.unshift(newSoul); // Add to the beginning of the array for newest first
+            savePeopleDataToLocalStorage();
+            renderAllCards(); // Re-render all cards to show the new one
+            closeAddEditModal();
+            showCustomMessage(`${newSoul.name} added to your Kindred Souls!`, "success");
+        }
+
+        function showCustomMessage(message, type = 'info') {
+            customMessageBox.textContent = message;
+            customMessageBox.className = 'custom-message-box'; 
+            customMessageBox.classList.add(type, 'show');
+            setTimeout(() => customMessageBox.classList.remove('show'), 3500);
+        }
+
+        function loadMoreCards() {
+            const currentDataLength = peopleData.length;
+            if (cardsLoaded >= currentDataLength) {
+                if (currentDataLength === 0) {
+                    loadingIndicator.textContent = "No kindred souls yet. Click '✨ Add New Soul' to begin!";
+                } else {
+                    loadingIndicator.textContent = "That's everyone! You have amazing people in your life.";
+                }
+                loadingIndicator.classList.remove('hidden');
+                return; 
+            }
+
+            loadingIndicator.classList.remove('hidden');
+            if (cardsLoaded === 0 && currentDataLength > 0) {
+                 loadingIndicator.textContent = "Loading kindred souls...";
+            } else if (currentDataLength > 0) {
+                 loadingIndicator.textContent = "Loading more souls...";
+            }
+            
+            setTimeout(() => {
+                const fragment = document.createDocumentFragment();
+                // Slice from the main peopleData array
+                const nextBatch = peopleData.slice(cardsLoaded, cardsLoaded + cardsPerLoad);
+                
+                nextBatch.forEach((person, localIndex) => {
+                    // The global index for gradient assignment is cardsLoaded + localIndex
+                    const cardElement = createPersonCard(person, cardsLoaded + localIndex);
+                    fragment.appendChild(cardElement);
+                });
+
+                cardContainer.appendChild(fragment);
+                cardsLoaded += nextBatch.length;
+                
+                if (cardsLoaded >= currentDataLength) {
+                    if (currentDataLength === 0) {
+                        loadingIndicator.textContent = "No kindred souls yet. Click '✨ Add New Soul' to begin!";
+                    } else {
+                        loadingIndicator.textContent = "That's everyone! You have amazing people in your life.";
+                    }
+                    loadingIndicator.classList.remove('hidden'); // Keep message visible
+                } else {
+                    loadingIndicator.classList.add('hidden'); 
+                }
+            }, 600);
+        }
+
+        function handleScroll() {
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 600) {
+                const isLoading = !loadingIndicator.classList.contains('hidden') && 
+                                  !loadingIndicator.textContent.startsWith("That's everyone") &&
+                                  !loadingIndicator.textContent.startsWith("No kindred souls yet");
+                if (cardsLoaded < peopleData.length && !isLoading) {
+                     loadMoreCards();
+                }
+            }
+        }
+
+        function initApp() {
+            peopleData = loadPeopleDataFromLocalStorage();
+            // If localStorage was empty and we now have `defaultPeopleData` (or an empty array)
+            if (peopleData.length === 0 && defaultPeopleData.length > 0 && !localStorage.getItem(LOCAL_STORAGE_KEY)) {
+                 // Optionally add default data if it's truly the first ever load and no stored data.
+                 // For now, we start empty and prompt user.
+                 // peopleData = [...defaultPeopleData];
+                 // savePeopleDataToLocalStorage();
+            }
+
+
+            renderAllCards(); // Initial render based on loaded or default data
+            
+            window.addEventListener('scroll', handleScroll, { passive: true });
+            openAddModalBtn.addEventListener('click', openAddEditModal);
+            personForm.addEventListener('submit', handlePersonFormSubmit);
+            
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    if (addEditModalEl.classList.contains('modal-visible')) closeAddEditModal();
+                }
+            });
+            addEditModalEl.addEventListener('click', (event) => {
+                if (event.target === addEditModalEl) closeAddEditModal();
+            });
+
+            showCustomMessage("Welcome! Add and cherish your Kindred Souls.", "info");
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
